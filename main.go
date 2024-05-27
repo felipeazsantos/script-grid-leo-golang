@@ -77,7 +77,7 @@ func main() {
 		}
 	}
 
-	gridScripts = append(gridScripts, grid, gridType, gridTypeItem, gridSku)
+	gridScripts = append(gridScripts, grid, gridType, gridTypeItem, gridSku, gridSkuItem)
 
 	if ok, err := generateDestFileWithInserts(gridScripts); !ok || err != nil {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
