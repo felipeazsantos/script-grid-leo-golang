@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"time"
 )
 
@@ -18,6 +20,8 @@ const (
 	TABLE_GRID = "grid"
 	TABLE_GRID_TYPE = "grid_type"
 	TABLE_GRID_TYPE_ITEM = "grid_type_item"
+	TABLE_GRID_SKU = "grid_sku"
+	NUM_WORKERS = 4
 )
 
 type GridScript struct {
@@ -41,27 +45,36 @@ func main() {
 	// get all sheet rows
 	rows, err := f.GetRows(sheetName)
 
-	gridScript := []GridScript{}
+	gridScripts := []*GridScript{}
 	grid := &GridScript{Table: TABLE_GRID, Inserts: []string{}, Exists: map[string]bool{}}
 	gridType := &GridScript{Table: TABLE_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
 	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
+	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}}
 
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
+			var wg sync.WaitGroup
+			wg.Add(NUM_WORKERS)
+
 			insertGrid := generateInsertGrid(row)
-			buildGridScript(insertGrid, insertGrid, grid)
+			go buildGridScript(insertGrid, insertGrid, grid, &wg)
 
 			insertGridType, key := generateInsertGridType(row)
-			buildGridScript(insertGridType, key, gridType)
+			go buildGridScript(insertGridType, key, gridType , &wg)
 
 			insertGridTypeItem, key := generateInsertGridTypeItem(row)
-			buildGridScript(insertGridTypeItem, key, gridTypeItem)
+			go buildGridScript(insertGridTypeItem, key, gridTypeItem , &wg)
+
+			insertGridSku, key := generateInsertGridSku(row)
+			go buildGridScript(insertGridSku, key, gridSku , &wg)
+
+			wg.Wait()
 		}
 	}
 
-	gridScript = append(gridScript, *grid, *gridType)
+	gridScripts = append(gridScripts, grid, gridType, gridTypeItem)
 
-	if ok, err := generateDestFileWithInserts(gridScript); !ok || err != nil {
+	if ok, err := generateDestFileWithInserts(gridScripts); !ok || err != nil {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
 	}
 
@@ -102,12 +115,11 @@ func generateInsertGridType(row []string) (string, string) {
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType
 
 	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" {
-		query := `ExecRaw(db,
-				"INSERT INTO (description, alias, view_type, date_created, last_updated)
-				SELECT '%s', '%s', '%s', now(), now()
-      			WHERE NOT EXISTS (
-					SELECT 1 FROM grid_type WHERE description = '%s' AND view_type = '%s'
-				);") &&
+		query := `ExecRaw(db, "INSERT INTO grid_type (description, alias, view_type, date_created, last_updated)
+								SELECT '%s', '%s', '%s', now(), now()
+								WHERE NOT EXISTS (
+									SELECT 1 FROM grid_type WHERE description = '%s' AND view_type = '%s'
+								);") &&
               `
 		query = fmt.Sprintf(query, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeDescription, gridTypeViewType)
 		return query, key
@@ -123,28 +135,69 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 	key := gridTypeDescription + gridTypeItemDescription
 
 	if gridTypeDescription != "" && gridTypeItemDescription != "" {
-		query := `INSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
-				  SELECT gt.id,
-						 max(gti.order_item),
-						 '%s',
-						 now(),
-						 now()
-				   FROM grid_type gt
-				   JOIN grid_type_item gti ON gt.id = gti.grid_type_item
- 				  WHERE NOT EXISTS (
-						SELECT 1 FROM grid_type_item gti2
-						JOIN gti.id = gti2.id
-						WHERE gti2.description = '%s'
-					);
+		query := `ExecRaw(db, "INSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
+							  SELECT gt.id,
+									 max(gti.order_item) + 1,
+									 '%s',
+									 now(),
+									 now()
+							   FROM grid_type gt
+							   JOIN grid_type_item gti ON gt.id = gti.grid_type_item
+							  WHERE gti.description = '%s'
+								AND gt.description = '%s'
+								AND NOT EXISTS (
+									SELECT 1 FROM grid_type_item gti2
+									WHERE gti.id = gti2.id
+								);")
 				`
-		query = fmt.Sprintf(query, gridTypeItemDescription, gridTypeItemDescription)
+		query = fmt.Sprintf(query, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription)
 		return query, key
 	}
 
 	return "", key
 }
 
-func generateDestFileWithInserts(gs []GridScript) (bool, error) {
+func generateInsertGridSku(row []string) (string, string) {
+	gridDescription := row[6]
+	gridSku := row[7]
+	skuMain := row[8]
+
+	if skuMain != "" {
+		skuMain = "1"
+	} else {
+		skuMain = "0"
+	}
+
+	key := gridDescription + gridSku
+	if gridDescription != "" && gridSku != "" {
+		skuId, _ := strconv.Atoi(gridSku)
+		skuMainInt, _ := strconv.Atoi(skuMain)
+
+		query := `INSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
+				SELECT
+					g.id,
+				    %d,
+					max(gs.order_sku) + 1,
+					%d,
+					now(),
+					now()
+				FROM grid g
+				JOIN grid_sku gs ON gs.grid_id = g.id AND gs.sku_id = %d
+			    WHERE g.description = '%s' 
+				AND NOT EXISTS (
+					SELECT 1 FROM grid_sku gs2
+					WHERE gs2.id = gs.id
+				);					
+				`
+
+		query = fmt.Sprintf(query, skuId, skuMainInt, skuId, gridDescription)
+		return query, key
+	}
+
+	return "", key
+}
+
+func generateDestFileWithInserts(gs []*GridScript) (bool, error) {
 	fileName := fmt.Sprintf("%s_%v.xlsx", DEST_FILE_NAME, time.Now().Format("20060102150405"))
 	f := excelize.NewFile()
 	defer f.Close()
@@ -207,7 +260,8 @@ func buildSheetCells(sheetName string, f *excelize.File, inserts []string) error
 	return nil
 }
 
-func buildGridScript(insert, key string, script *GridScript) {
+func buildGridScript(insert, key string, script *GridScript, wg *sync.WaitGroup) {
+	defer wg.Done()
 	if insert != "" {
 		exists := script.Exists[key]
 		if !exists {
