@@ -13,7 +13,7 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Carga de Grade 2024 05 10.xlsx"
+	BASE_FILE_NAME = "Carga de Grade 2024 05 09.xlsx"
 	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "Generated"
@@ -165,7 +165,10 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 func generateInsertGridSku(row []string) (string, string) {
 	gridDescription := row[6]
 	gridSku := row[7]
-	skuMain := row[8]
+	var skuMain string
+	if len(row) > 8 {
+		skuMain = row[8]
+	}
 
 	if skuMain != "" {
 		skuMain = "1"
