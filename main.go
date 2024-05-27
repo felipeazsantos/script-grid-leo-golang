@@ -21,7 +21,8 @@ const (
 	TABLE_GRID_TYPE = "grid_type"
 	TABLE_GRID_TYPE_ITEM = "grid_type_item"
 	TABLE_GRID_SKU = "grid_sku"
-	NUM_WORKERS = 4
+	TABLE_GRID_SKU_ITEM = "grid_sku_item"
+	NUM_WORKERS = 5
 )
 
 type GridScript struct {
@@ -50,6 +51,7 @@ func main() {
 	gridType := &GridScript{Table: TABLE_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
 	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
 	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}}
+	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
 
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
@@ -68,11 +70,14 @@ func main() {
 			insertGridSku, key := generateInsertGridSku(row)
 			go buildGridScript(insertGridSku, key, gridSku , &wg)
 
+			insertGridSkuItem, key := generateInsertGridSkuItem(row)
+			go buildGridScript(insertGridSkuItem, key, gridSkuItem, &wg)
+
 			wg.Wait()
 		}
 	}
 
-	gridScripts = append(gridScripts, grid, gridType, gridTypeItem)
+	gridScripts = append(gridScripts, grid, gridType, gridTypeItem, gridSku)
 
 	if ok, err := generateDestFileWithInserts(gridScripts); !ok || err != nil {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
@@ -142,7 +147,7 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 									 now(),
 									 now()
 							   FROM grid_type gt
-							   JOIN grid_type_item gti ON gt.id = gti.grid_type_item
+							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_item
 							  WHERE gti.description = '%s'
 								AND gt.description = '%s'
 								AND NOT EXISTS (
@@ -173,7 +178,7 @@ func generateInsertGridSku(row []string) (string, string) {
 		skuId, _ := strconv.Atoi(gridSku)
 		skuMainInt, _ := strconv.Atoi(skuMain)
 
-		query := `INSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
+		query := `ExecRaw(db, "INSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
 				SELECT
 					g.id,
 				    %d,
@@ -182,15 +187,65 @@ func generateInsertGridSku(row []string) (string, string) {
 					now(),
 					now()
 				FROM grid g
-				JOIN grid_sku gs ON gs.grid_id = g.id AND gs.sku_id = %d
+				LEFT JOIN grid_sku gs ON gs.grid_id = g.id AND gs.sku_id = %d
 			    WHERE g.description = '%s' 
 				AND NOT EXISTS (
 					SELECT 1 FROM grid_sku gs2
 					WHERE gs2.id = gs.id
-				);					
+				);") &&		
 				`
 
 		query = fmt.Sprintf(query, skuId, skuMainInt, skuId, gridDescription)
+		return query, key
+	}
+
+	return "", key
+}
+
+func generateInsertGridSkuItem(row []string) (string, string) {
+	gridTypeDescription := row[1]
+	gridTypeItemDescription := row[3]
+	gridDescription := row[6]
+	gridSku := row[7]
+	gridTypeAlias := row[2]
+	gridTypeViewType := row[4]
+
+	switch gridTypeViewType {
+	case "Image":
+		gridTypeViewType = "I"
+	case "Combobox":
+		gridTypeViewType = "C"
+	case "RadioButton":
+		gridTypeViewType = "R"
+	default:
+		gridTypeViewType = ""
+	}
+
+	key := gridTypeDescription + gridTypeItemDescription + gridDescription + gridSku + gridTypeAlias + gridTypeViewType
+	if gridTypeDescription != "" && gridSku != "" && gridTypeViewType != "" &&
+		gridDescription != "" && gridTypeItemDescription != "" && gridTypeAlias != "" {
+		skuId, _ := strconv.Atoi(gridSku)
+
+		query := `ExecRaw(db, "INSERT INTO grid_sku_item (grid_sku_id, grid_type_item_id, date_created, last_updated)
+						SELECT gs.id,
+							   gti.id,
+							   now(),
+							   now()
+						  FROM grid_grid_type ggt
+							JOIN grid g ON ggt.grid_id = g.id
+						    JOIN grid_type gt ON gt.id = ggt.grid_type_id
+						    JOIN grid_type_item gti ON gti.grid_type_id = gt.id
+							JOIN grid_sku gs ON gs.grid_id = g.id and gs.sku_id = %d
+						 WHERE g.description = '%s'
+						   AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
+							AND gti.description = '%s'
+							AND NOT EXISTS (
+								SELECT 1 FROM grid_sku_item gsi 
+								WHERE gsi.grid_sku_id = gs.id
+								  AND gsi.grid_type_item_id = gti.id
+							);") &&
+				`
+		query = fmt.Sprintf(query, skuId, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeItemDescription)
 		return query, key
 	}
 
