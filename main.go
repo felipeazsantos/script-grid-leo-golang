@@ -12,8 +12,8 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
-	BASE_SHEET_INDEX = 0
+	BASE_FILE_NAME = "Carga de Grade 2024 05 17_ Tampas.xlsx"
+	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "SCRIPT - "
 	TABLE_IMAGE = "image"
@@ -24,6 +24,7 @@ const (
 	TABLE_GRID_SKU = "grid_sku"
 	TABLE_GRID_SKU_ITEM = "grid_sku_item"
 	NUM_WORKERS = 7
+	CRASIS = "`"
 )
 
 type GridScript struct {
@@ -42,7 +43,7 @@ func main() {
 
 	// get sheet name
 	sheetNames := f.GetSheetList()
-	sheetName := sheetNames[BASE_SHEET_INDEX]
+	sheetName := sheetNames[len(sheetNames) - 1]
 
 	// get all sheet rows
 	rows, err := f.GetRows(sheetName)
@@ -98,13 +99,13 @@ func main() {
 func generateInsertGrid(row []string) string {
 	description := row[6]
 	if description != "" {
-		query := `ExecRaw(db, "INSERT INTO grid (description, date_created, last_updated)
+		query := `ExecRaw(db, %sINSERT INTO grid (description, date_created, last_updated)
 				  SELECT '%s', now(), now()
                     WHERE NOT EXISTS (
 						SELECT 1 FROM grid WHERE description = '%s'
-					);") &&
+					);%s) &&
 				`
-		query = fmt.Sprintf(query, description, description)
+		query = fmt.Sprintf(query, CRASIS, description, description, CRASIS)
 		return query
 	}
 	return ""
@@ -119,13 +120,13 @@ func generateInsertGridType(row []string) (string, string) {
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType
 
 	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" {
-		query := `ExecRaw(db, "INSERT INTO grid_type (description, alias, view_type, date_created, last_updated)
+		query := `ExecRaw(db, %sINSERT INTO grid_type (description, alias, view_type, date_created, last_updated)
 								SELECT '%s', '%s', '%s', now(), now()
 								WHERE NOT EXISTS (
 									SELECT 1 FROM grid_type WHERE description = '%s' AND view_type = '%s'
-								);") &&
+								);%s) &&
               `
-		query = fmt.Sprintf(query, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeDescription, gridTypeViewType)
+		query = fmt.Sprintf(query, CRASIS, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeDescription, gridTypeViewType, CRASIS)
 		return query, key
 	}
 
@@ -142,7 +143,7 @@ func generateInsertGridGridType(row []string) (string, string) {
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType + gridDescription
 
 	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && gridDescription != "" {
-		query := `ExecRaw(db, "INSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
+		query := `ExecRaw(db, %sINSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
 				  SELECT g.id,
 						 gt.id,
 						 COALESCE(max(ggt.order_type), 0) + 1,
@@ -157,9 +158,9 @@ func generateInsertGridGridType(row []string) (string, string) {
 					 	SELECT 1 FROM grid_grid_type ggt2
 						 WHERE ggt2.id = ggt.id
 					  )
-					 GROUP BY g.id, gt.id;") &&
+					 GROUP BY g.id, gt.id;%s) &&
 				`
-		query = fmt.Sprintf(query, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType)
+		query = fmt.Sprintf(query, CRASIS, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
 		return query, key
 	}
 
@@ -173,7 +174,7 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 	key := gridTypeDescription + gridTypeItemDescription
 
 	if gridTypeDescription != "" && gridTypeItemDescription != "" {
-		query := `ExecRaw(db, "INSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
+		query := `ExecRaw(db, %sINSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
 							  SELECT gt.id,
 									 COALESCE(max(gti.order_item), 0) + 1,
 									 '%s',
@@ -186,9 +187,9 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 									SELECT 1 FROM grid_type_item gti2
 									WHERE gti.id = gti2.id
 								)
-								GROUP BY gt.id;") &&
+								GROUP BY gt.id;%s) &&
 				`
-		query = fmt.Sprintf(query, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription)
+		query = fmt.Sprintf(query, CRASIS, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription, CRASIS)
 		return query, key
 	}
 
@@ -214,7 +215,7 @@ func generateInsertGridSku(row []string) (string, string) {
 		skuId, _ := strconv.Atoi(gridSku)
 		skuMainInt, _ := strconv.Atoi(skuMain)
 
-		query := `ExecRaw(db, "INSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
+		query := `ExecRaw(db, %sINSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
 				SELECT
 					g.id,
 				    %d as sku_id,
@@ -229,10 +230,10 @@ func generateInsertGridSku(row []string) (string, string) {
 					SELECT 1 FROM grid_sku gs2
 					WHERE gs2.id = gs.id
 				)
-				GROUP BY g.id, sku_id;") &&		
+				GROUP BY g.id, sku_id;%s) &&		
 				`
 
-		query = fmt.Sprintf(query, skuId, skuMainInt, skuId, gridDescription)
+		query = fmt.Sprintf(query, CRASIS, skuId, skuMainInt, skuId, gridDescription, CRASIS)
 		return query, key
 	}
 
@@ -254,7 +255,7 @@ func generateInsertGridSkuItem(row []string) (string, string) {
 		gridDescription != "" && gridTypeItemDescription != "" && gridTypeAlias != "" {
 		skuId, _ := strconv.Atoi(gridSku)
 
-		query := `ExecRaw(db, "INSERT INTO grid_sku_item (grid_sku_id, grid_type_item_id, date_created, last_updated)
+		query := `ExecRaw(db, %sINSERT INTO grid_sku_item (grid_sku_id, grid_type_item_id, date_created, last_updated)
 						SELECT gs.id,
 							   gti.id,
 							   now(),
@@ -271,9 +272,9 @@ func generateInsertGridSkuItem(row []string) (string, string) {
 								SELECT 1 FROM grid_sku_item gsi 
 								WHERE gsi.grid_sku_id = gs.id
 								  AND gsi.grid_type_item_id = gti.id
-							);") &&
+							);%s) &&
 				`
-		query = fmt.Sprintf(query, skuId, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeItemDescription)
+		query = fmt.Sprintf(query, CRASIS, skuId, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeItemDescription, CRASIS)
 		return query, key
 	}
 
@@ -294,7 +295,7 @@ func generateInsertImages(row []string) (string, string) {
 	   gridTypeViewType != "" {
 		imageName := filepath.Base(imagePath)
 
-		query := `ExecRaw(db, "INSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
+		query := `ExecRaw(db, %sINSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
 				  SELECT gti.id,
 						 'gti',
 					     '%s',
@@ -310,10 +311,10 @@ func generateInsertImages(row []string) (string, string) {
 					AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
 				    AND NOT EXISTS (
 						SELECT 1 FROM image i 
-						WHERE i.id_origin = gti.id
-					);") &&
+						WHERE i.id_origin = gti.id and i.type = 'gti' and i.priority = 10
+					);%s) &&
 				`
-		query = fmt.Sprintf(query, imageName, gridTypeItemDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType)
+		query = fmt.Sprintf(query, CRASIS, imageName, gridTypeItemDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
 		return query, key
 	}
 
