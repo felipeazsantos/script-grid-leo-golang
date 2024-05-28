@@ -13,17 +13,18 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
-	BASE_SHEET_INDEX = 0
+	BASE_FILE_NAME = "Carga de Grade 2024 05 10.xlsx"
+	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
-	DEST_FILE_NAME = "Generated"
+	DEST_FILE_NAME = "SCRIPT - "
+	TABLE_IMAGE = "image"
 	TABLE_GRID = "grid"
 	TABLE_GRID_TYPE = "grid_type"
 	TABLE_GRID_GRID_TYPE = "grid_grid_type"
 	TABLE_GRID_TYPE_ITEM = "grid_type_item"
 	TABLE_GRID_SKU = "grid_sku"
 	TABLE_GRID_SKU_ITEM = "grid_sku_item"
-	NUM_WORKERS = 6
+	NUM_WORKERS = 7
 )
 
 type GridScript struct {
@@ -54,6 +55,7 @@ func main() {
 	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
 	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}}
 	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
+	image := &GridScript{Table: TABLE_IMAGE, Inserts: []string{}, Exists: map[string]bool{}}
 
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
@@ -78,11 +80,14 @@ func main() {
 			insertGridSkuItem, key := generateInsertGridSkuItem(row)
 			go buildGridScript(insertGridSkuItem, key, gridSkuItem, &wg)
 
+			insertImages, key := generateInsertImages(row)
+			go buildGridScript(insertImages, key, image, &wg)
+
 			wg.Wait()
 		}
 	}
 
-	gridScripts = append(gridScripts, grid, gridType, gridGridType, gridTypeItem, gridSku, gridSkuItem)
+	gridScripts = append(gridScripts, grid, gridType, gridGridType, gridTypeItem, gridSku, gridSkuItem, image)
 
 	if ok, err := generateDestFileWithInserts(gridScripts); !ok || err != nil {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
@@ -155,17 +160,17 @@ func generateInsertGridGridType(row []string) (string, string) {
 		gridTypeViewType = ""
 	}
 
-
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType + gridDescription
 
 	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && gridDescription != "" {
-		query := `INSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
+		query := `ExecRaw(db, "INSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
 				  SELECT g.id,
 						 gt.id,
-						 max(ggt.order_type) + 1,
+						 COALESCE(max(ggt.order_type), 0) + 1,
 						 now(),
 					     now()
-					FROM grid g, grid_type gt
+					FROM grid g
+					 CROSS JOIN grid_type gt
 					 LEFT JOIN grid_grid_type ggt ON ggt.grid_id = g.id and ggt.grid_type_id = gt.id
 					WHERE g.description = '%s' 
 					  AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
@@ -173,6 +178,7 @@ func generateInsertGridGridType(row []string) (string, string) {
 					 	SELECT 1 FROM grid_grid_type ggt2
 						 WHERE ggt2.id = ggt.id
 					  )
+					 GROUP BY g.id, gt.id;") &&
 				`
 		query = fmt.Sprintf(query, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType)
 		return query, key
@@ -190,18 +196,18 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 	if gridTypeDescription != "" && gridTypeItemDescription != "" {
 		query := `ExecRaw(db, "INSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
 							  SELECT gt.id,
-									 max(gti.order_item) + 1,
+									 COALESCE(max(gti.order_item), 0) + 1,
 									 '%s',
 									 now(),
 									 now()
 							   FROM grid_type gt
-							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_id
-							  WHERE gti.description = '%s'
-								AND gt.description = '%s'
+							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_id AND gti.description = '%s'
+							  WHERE gt.description = '%s'
 								AND NOT EXISTS (
 									SELECT 1 FROM grid_type_item gti2
 									WHERE gti.id = gti2.id
-								);")
+								)
+								GROUP BY gt.id;") &&
 				`
 		query = fmt.Sprintf(query, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription)
 		return query, key
@@ -232,8 +238,8 @@ func generateInsertGridSku(row []string) (string, string) {
 		query := `ExecRaw(db, "INSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
 				SELECT
 					g.id,
-				    %d,
-					max(gs.order_sku) + 1,
+				    %d as sku_id,
+					COALESCE(max(gs.order_sku), 0) + 1,
 					%d,
 					now(),
 					now()
@@ -243,7 +249,8 @@ func generateInsertGridSku(row []string) (string, string) {
 				AND NOT EXISTS (
 					SELECT 1 FROM grid_sku gs2
 					WHERE gs2.id = gs.id
-				);") &&		
+				)
+				GROUP BY g.id, sku_id;") &&		
 				`
 
 		query = fmt.Sprintf(query, skuId, skuMainInt, skuId, gridDescription)
@@ -303,8 +310,42 @@ func generateInsertGridSkuItem(row []string) (string, string) {
 	return "", key
 }
 
+func generateInsertImages(row []string) (string, string) {
+	imagePath := row[5]
+	gridTypeDescription := row[1]
+	gridTypeItemDescription := row[3]
+	key := imagePath
+
+	if imagePath != "" && gridTypeDescription != "" && gridTypeItemDescription != "" {
+		imageName := filepath.Base(imagePath)
+
+		query := `INSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
+				  SELECT gti.id,
+						 'gti',
+					     '%s',
+						 'grid-type-item/full/',
+						 gti.id,
+					     10,
+						 now(),
+						 now(),
+						 1
+					FROM grid_type_item gti
+					JOIN grid_type gt ON gti.grid_type_id = gt.id
+				   WHERE gti.description = '%s' AND gt.description = '%s'
+				    AND NOT EXISTS (
+						SELECT 1 FROM image i 
+						WHERE i.id_origin = gti.id
+					);
+				`
+		query = fmt.Sprintf(query, imageName, gridTypeItemDescription, gridTypeDescription)
+		return query, key
+	}
+
+	return "", key
+}
+
 func generateDestFileWithInserts(gs []*GridScript) (bool, error) {
-	fileName := fmt.Sprintf("%s_%v.xlsx", DEST_FILE_NAME, time.Now().Format("20060102150405"))
+	fileName := DEST_FILE_NAME + BASE_FILE_NAME
 	f := excelize.NewFile()
 	defer f.Close()
 
