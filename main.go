@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -370,7 +371,7 @@ func fillSheetCells(sheetName string, f *excelize.File, inserts []string) error 
 	cell := fmt.Sprintf("A%d", cellRow)
 	for _, insert := range inserts {
 		if count == limit {
-			err := f.SetCellValue(sheetName, cell, cellValue)
+			err := f.SetCellValue(sheetName, cell, formatCellValue(cellValue))
 			if err != nil {
 				return err
 			}
@@ -385,12 +386,11 @@ func fillSheetCells(sheetName string, f *excelize.File, inserts []string) error 
 	}
 
 	if count < limit && cellValue != "" {
-		err := f.SetCellValue(sheetName, cell, cellValue)
+		err := f.SetCellValue(sheetName, cell, formatCellValue(cellValue))
 		if err != nil {
 			return err
 		}
 	}
-
 
 	return nil
 }
@@ -431,4 +431,16 @@ func getGridTypeViewType(value string) string {
 	default:
 		return ""
 	}
+}
+
+func formatCellValue(value string) string {
+	cellValue := value
+	cellValue = strings.ReplaceAll(cellValue, "D' Agua", "D Água")
+	cellValue = strings.ReplaceAll(cellValue, "D' Água", "D Água")
+	cellValue = strings.ReplaceAll(cellValue, "D'Água", "D Água")
+	cellValue = strings.ReplaceAll(cellValue, "D'Agua", "D Água")
+	cellValue = strings.ReplaceAll(cellValue, "\n", "")
+	cellValue = strings.ReplaceAll(cellValue, "\t", "")
+	cellValue = strings.ReplaceAll(cellValue, "  ", "")
+	return cellValue
 }
