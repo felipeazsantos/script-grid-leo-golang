@@ -12,7 +12,7 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Carga de Grade 2024 05 17_ Tampas.xlsx"
+	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
 	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "SCRIPT - "
@@ -360,12 +360,14 @@ func createSheetNewTab(tabName string, f *excelize.File) error {
 }
 
 func fillSheetCells(sheetName string, f *excelize.File, inserts []string) error {
-	for rowIndex, insert := range inserts {
-		cell := fmt.Sprintf("A%d", rowIndex+1)
-		err := f.SetCellValue(sheetName, cell, insert)
-		if err != nil {
-			return err
-		}
+	var cellValue string
+	for _, insert := range inserts {
+		cellValue += insert
+	}
+
+	err := f.SetCellValue(sheetName, "A1", cellValue)
+	if err != nil {
+		return err
 	}
 	return nil
 }
