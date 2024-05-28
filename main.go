@@ -13,16 +13,17 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Carga de Grade 2024 05 09.xlsx"
-	BASE_SHEET_INDEX = 1
+	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
+	BASE_SHEET_INDEX = 0
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "Generated"
 	TABLE_GRID = "grid"
 	TABLE_GRID_TYPE = "grid_type"
+	TABLE_GRID_GRID_TYPE = "grid_grid_type"
 	TABLE_GRID_TYPE_ITEM = "grid_type_item"
 	TABLE_GRID_SKU = "grid_sku"
 	TABLE_GRID_SKU_ITEM = "grid_sku_item"
-	NUM_WORKERS = 5
+	NUM_WORKERS = 6
 )
 
 type GridScript struct {
@@ -49,6 +50,7 @@ func main() {
 	gridScripts := []*GridScript{}
 	grid := &GridScript{Table: TABLE_GRID, Inserts: []string{}, Exists: map[string]bool{}}
 	gridType := &GridScript{Table: TABLE_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
+	gridGridType := &GridScript{Table: TABLE_GRID_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
 	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
 	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}}
 	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
@@ -64,6 +66,9 @@ func main() {
 			insertGridType, key := generateInsertGridType(row)
 			go buildGridScript(insertGridType, key, gridType , &wg)
 
+			insertGridGridType, key := generateInsertGridGridType(row)
+			go buildGridScript(insertGridGridType, key, gridGridType , &wg)
+
 			insertGridTypeItem, key := generateInsertGridTypeItem(row)
 			go buildGridScript(insertGridTypeItem, key, gridTypeItem , &wg)
 
@@ -77,7 +82,7 @@ func main() {
 		}
 	}
 
-	gridScripts = append(gridScripts, grid, gridType, gridTypeItem, gridSku, gridSkuItem)
+	gridScripts = append(gridScripts, grid, gridType, gridGridType, gridTypeItem, gridSku, gridSkuItem)
 
 	if ok, err := generateDestFileWithInserts(gridScripts); !ok || err != nil {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
@@ -133,6 +138,49 @@ func generateInsertGridType(row []string) (string, string) {
 	return "", key
 }
 
+func generateInsertGridGridType(row []string) (string, string) {
+	gridTypeDescription := row[1]
+	gridTypeAlias := row[2]
+	gridTypeViewType := row[4]
+	gridDescription := row[6]
+
+	switch gridTypeViewType {
+	case "Image":
+		gridTypeViewType = "I"
+	case "Combobox":
+		gridTypeViewType = "C"
+	case "RadioButton":
+		gridTypeViewType = "R"
+	default:
+		gridTypeViewType = ""
+	}
+
+
+	key := gridTypeDescription + gridTypeAlias + gridTypeViewType + gridDescription
+
+	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && gridDescription != "" {
+		query := `INSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
+				  SELECT g.id,
+						 gt.id,
+						 max(ggt.order_type) + 1,
+						 now(),
+					     now()
+					FROM grid g, grid_type gt
+					 LEFT JOIN grid_grid_type ggt ON ggt.grid_id = g.id and ggt.grid_type_id = gt.id
+					WHERE g.description = '%s' 
+					  AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
+					  AND NOT EXISTS (
+					 	SELECT 1 FROM grid_grid_type ggt2
+						 WHERE ggt2.id = ggt.id
+					  )
+				`
+		query = fmt.Sprintf(query, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType)
+		return query, key
+	}
+
+	return "", key
+}
+
 func generateInsertGridTypeItem(row []string) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeItemDescription := row[3]
@@ -147,7 +195,7 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 									 now(),
 									 now()
 							   FROM grid_type gt
-							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_item
+							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_id
 							  WHERE gti.description = '%s'
 								AND gt.description = '%s'
 								AND NOT EXISTS (
