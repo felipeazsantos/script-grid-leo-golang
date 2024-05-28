@@ -12,7 +12,7 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
+	BASE_FILE_NAME = "Carga de Grade 2024 05 17_ Tampas.xlsx"
 	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "SCRIPT - "
@@ -25,7 +25,7 @@ const (
 	TABLE_GRID_SKU_ITEM = "grid_sku_item"
 	NUM_WORKERS = 7
 	CRASIS = "`"
-	INSERT_LIMIT_ON_CELL = 20
+	INSERT_LIMIT_ON_CELL = 30
 )
 
 type GridScript struct {
@@ -58,6 +58,8 @@ func main() {
 	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
 	image := &GridScript{Table: TABLE_IMAGE, Inserts: []string{}, Exists: map[string]bool{}}
 
+	gridTypeItemOrderItem, gridSkuOrderSku, gridGridTypeOrderType := 1, 1, 1
+
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
 			var wg sync.WaitGroup
@@ -69,13 +71,13 @@ func main() {
 			insertGridType, key := generateInsertGridType(row)
 			go buildGridScript(insertGridType, key, gridType , &wg)
 
-			insertGridGridType, key := generateInsertGridGridType(row)
+			insertGridGridType, key := generateInsertGridGridType(row, &gridGridTypeOrderType)
 			go buildGridScript(insertGridGridType, key, gridGridType , &wg)
 
-			insertGridTypeItem, key := generateInsertGridTypeItem(row)
+			insertGridTypeItem, key := generateInsertGridTypeItem(row, &gridTypeItemOrderItem)
 			go buildGridScript(insertGridTypeItem, key, gridTypeItem , &wg)
 
-			insertGridSku, key := generateInsertGridSku(row)
+			insertGridSku, key := generateInsertGridSku(row, &gridSkuOrderSku)
 			go buildGridScript(insertGridSku, key, gridSku , &wg)
 
 			insertGridSkuItem, key := generateInsertGridSkuItem(row)
@@ -134,7 +136,7 @@ func generateInsertGridType(row []string) (string, string) {
 	return "", key
 }
 
-func generateInsertGridGridType(row []string) (string, string) {
+func generateInsertGridGridType(row []string, orderType *int) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
@@ -147,7 +149,7 @@ func generateInsertGridGridType(row []string) (string, string) {
 		query := `ExecRaw(db, %sINSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
 				  SELECT g.id,
 						 gt.id,
-						 COALESCE(max(ggt.order_type), 0) + 1,
+						 %d,
 						 now(),
 					     now()
 					FROM grid g
@@ -158,17 +160,17 @@ func generateInsertGridGridType(row []string) (string, string) {
 					  AND NOT EXISTS (
 					 	SELECT 1 FROM grid_grid_type ggt2
 						 WHERE ggt2.id = ggt.id
-					  )
-					 GROUP BY g.id, gt.id;%s) &&
+					  );%s) &&
 				`
-		query = fmt.Sprintf(query, CRASIS, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
+		query = fmt.Sprintf(query, CRASIS, *orderType, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
+		*orderType++
 		return query, key
 	}
 
 	return "", key
 }
 
-func generateInsertGridTypeItem(row []string) (string, string) {
+func generateInsertGridTypeItem(row []string, orderItem *int) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeItemDescription := row[3]
 
@@ -177,7 +179,7 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 	if gridTypeDescription != "" && gridTypeItemDescription != "" {
 		query := `ExecRaw(db, %sINSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
 							  SELECT gt.id,
-									 COALESCE(max(gti.order_item), 0) + 1,
+									 %d,
 									 '%s',
 									 now(),
 									 now()
@@ -187,17 +189,17 @@ func generateInsertGridTypeItem(row []string) (string, string) {
 								AND NOT EXISTS (
 									SELECT 1 FROM grid_type_item gti2
 									WHERE gti.id = gti2.id
-								)
-								GROUP BY gt.id;%s) &&
+								);%s) &&
 				`
-		query = fmt.Sprintf(query, CRASIS, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription, CRASIS)
+		query = fmt.Sprintf(query, CRASIS, *orderItem, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription, CRASIS)
+		*orderItem++
 		return query, key
 	}
 
 	return "", key
 }
 
-func generateInsertGridSku(row []string) (string, string) {
+func generateInsertGridSku(row []string, orderSku *int) (string, string) {
 	gridDescription := row[6]
 	gridSku := row[7]
 	var skuMain string
@@ -220,7 +222,7 @@ func generateInsertGridSku(row []string) (string, string) {
 				SELECT
 					g.id,
 				    %d as sku_id,
-					COALESCE(max(gs.order_sku), 0) + 1,
+					%d,
 					%d,
 					now(),
 					now()
@@ -230,11 +232,11 @@ func generateInsertGridSku(row []string) (string, string) {
 				AND NOT EXISTS (
 					SELECT 1 FROM grid_sku gs2
 					WHERE gs2.id = gs.id
-				)
-				GROUP BY g.id, sku_id;%s) &&		
+				);%s) &&		
 				`
 
-		query = fmt.Sprintf(query, CRASIS, skuId, skuMainInt, skuId, gridDescription, CRASIS)
+		query = fmt.Sprintf(query, CRASIS, skuId, *orderSku, skuMainInt, skuId, gridDescription, CRASIS)
+		*orderSku++
 		return query, key
 	}
 
