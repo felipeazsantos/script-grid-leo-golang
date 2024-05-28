@@ -93,7 +93,7 @@ func main() {
 		log.Fatalf("Error to generate the Excel file. Error: %v", err)
 	}
 
-	fmt.Println("Processed with successfully!")
+	fmt.Printf("Processed sheet %s with successfully! \n", DEST_FILE_NAME + BASE_FILE_NAME)
 }
 
 func generateInsertGrid(row []string) string {
