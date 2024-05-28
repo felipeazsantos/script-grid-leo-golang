@@ -25,6 +25,7 @@ const (
 	TABLE_GRID_SKU_ITEM = "grid_sku_item"
 	NUM_WORKERS = 7
 	CRASIS = "`"
+	INSERT_LIMIT_ON_CELL = 20
 )
 
 type GridScript struct {
@@ -361,14 +362,34 @@ func createSheetNewTab(tabName string, f *excelize.File) error {
 
 func fillSheetCells(sheetName string, f *excelize.File, inserts []string) error {
 	var cellValue string
+	cellRow := 1
+	count := 1
+	limit := INSERT_LIMIT_ON_CELL
+	cell := fmt.Sprintf("A%d", cellRow)
 	for _, insert := range inserts {
+		if count == limit {
+			err := f.SetCellValue(sheetName, cell, cellValue)
+			if err != nil {
+				return err
+			}
+			limit += INSERT_LIMIT_ON_CELL
+			cellRow++
+			cell = fmt.Sprintf("A%d", cellRow)
+			cellValue = ""
+		}
+
 		cellValue += insert
+		count++
 	}
 
-	err := f.SetCellValue(sheetName, "A1", cellValue)
-	if err != nil {
-		return err
+	if count < limit && cellValue != "" {
+		err := f.SetCellValue(sheetName, cell, cellValue)
+		if err != nil {
+			return err
+		}
 	}
+
+
 	return nil
 }
 
