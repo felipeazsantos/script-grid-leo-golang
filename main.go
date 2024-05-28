@@ -319,7 +319,7 @@ func generateInsertImages(row []string) (string, string) {
 	if imagePath != "" && gridTypeDescription != "" && gridTypeItemDescription != "" {
 		imageName := filepath.Base(imagePath)
 
-		query := `INSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
+		query := `ExecRaw(db, "INSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
 				  SELECT gti.id,
 						 'gti',
 					     '%s',
@@ -335,7 +335,7 @@ func generateInsertImages(row []string) (string, string) {
 				    AND NOT EXISTS (
 						SELECT 1 FROM image i 
 						WHERE i.id_origin = gti.id
-					);
+					);") &&
 				`
 		query = fmt.Sprintf(query, imageName, gridTypeItemDescription, gridTypeDescription)
 		return query, key
