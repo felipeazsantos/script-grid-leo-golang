@@ -12,8 +12,8 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Carga de Grade 2024 05 10.xlsx"
-	BASE_SHEET_INDEX = 1
+	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
+	BASE_SHEET_INDEX = 0
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "SCRIPT - "
 	TABLE_IMAGE = "image"
@@ -114,17 +114,7 @@ func generateInsertGridType(row []string) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
-
-	switch gridTypeViewType {
-	case "Image":
-		gridTypeViewType = "I"
-	case "Combobox":
-		gridTypeViewType = "C"
-	case "RadioButton":
-		gridTypeViewType = "R"
-	default:
-		gridTypeViewType = ""
-	}
+	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
 
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType
 
@@ -147,17 +137,7 @@ func generateInsertGridGridType(row []string) (string, string) {
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
 	gridDescription := row[6]
-
-	switch gridTypeViewType {
-	case "Image":
-		gridTypeViewType = "I"
-	case "Combobox":
-		gridTypeViewType = "C"
-	case "RadioButton":
-		gridTypeViewType = "R"
-	default:
-		gridTypeViewType = ""
-	}
+	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
 
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType + gridDescription
 
@@ -267,16 +247,7 @@ func generateInsertGridSkuItem(row []string) (string, string) {
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
 
-	switch gridTypeViewType {
-	case "Image":
-		gridTypeViewType = "I"
-	case "Combobox":
-		gridTypeViewType = "C"
-	case "RadioButton":
-		gridTypeViewType = "R"
-	default:
-		gridTypeViewType = ""
-	}
+	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
 
 	key := gridTypeDescription + gridTypeItemDescription + gridDescription + gridSku + gridTypeAlias + gridTypeViewType
 	if gridTypeDescription != "" && gridSku != "" && gridTypeViewType != "" &&
@@ -313,9 +284,14 @@ func generateInsertImages(row []string) (string, string) {
 	imagePath := row[5]
 	gridTypeDescription := row[1]
 	gridTypeItemDescription := row[3]
+	gridTypeAlias := row[2]
+	gridTypeViewType := row[4]
 	key := imagePath
 
-	if imagePath != "" && gridTypeDescription != "" && gridTypeItemDescription != "" {
+	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
+
+	if imagePath != "" && gridTypeDescription != "" && gridTypeItemDescription != "" && gridTypeAlias != "" &&
+	   gridTypeViewType != "" {
 		imageName := filepath.Base(imagePath)
 
 		query := `ExecRaw(db, "INSERT INTO image (id_origin, type, name, path, source, priority, date_created, last_updated, tenant_store_id)
@@ -330,13 +306,14 @@ func generateInsertImages(row []string) (string, string) {
 						 1
 					FROM grid_type_item gti
 					JOIN grid_type gt ON gti.grid_type_id = gt.id
-				   WHERE gti.description = '%s' AND gt.description = '%s'
+				   WHERE gti.description = '%s' 
+					AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
 				    AND NOT EXISTS (
 						SELECT 1 FROM image i 
 						WHERE i.id_origin = gti.id
 					);") &&
 				`
-		query = fmt.Sprintf(query, imageName, gridTypeItemDescription, gridTypeDescription)
+		query = fmt.Sprintf(query, imageName, gridTypeItemDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType)
 		return query, key
 	}
 
@@ -414,5 +391,18 @@ func buildGridScript(insert, key string, script *GridScript, wg *sync.WaitGroup)
 			script.Inserts = append(script.Inserts, insert)
 		}
 		script.Exists[key] = true
+	}
+}
+
+func getGridTypeViewType(value string) string {
+	switch value {
+	case "Image":
+		return "I"
+	case "Combobox":
+		return "C"
+	case "RadioButton":
+		return "R"
+	default:
+		return ""
 	}
 }
