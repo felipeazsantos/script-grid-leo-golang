@@ -244,10 +244,13 @@ func generateInsertGridSku(row []string, orderSku *int, script *GridScript) (str
 				AND NOT EXISTS (
 					SELECT 1 FROM grid_sku gs2
 					WHERE gs2.id = gs.id
+				)
+				AND EXISTS (
+					SELECT 1 FROM sku WHERE id = %d
 				);%s) &&		
 				`
 
-		query = fmt.Sprintf(query, CRASIS, skuId, *orderSku, skuMainInt, skuId, gridDescription, CRASIS)
+		query = fmt.Sprintf(query, CRASIS, skuId, *orderSku, skuMainInt, skuId, gridDescription, skuId, CRASIS)
 		*orderSku++
 		return query, key
 	}
@@ -287,9 +290,12 @@ func generateInsertGridSkuItem(row []string) (string, string) {
 								SELECT 1 FROM grid_sku_item gsi 
 								WHERE gsi.grid_sku_id = gs.id
 								  AND gsi.grid_type_item_id = gti.id
+							)
+							AND EXISTS (
+								SELECT 1 FROM sku WHERE id = %d
 							);%s) &&
 				`
-		query = fmt.Sprintf(query, CRASIS, skuId, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeItemDescription, CRASIS)
+		query = fmt.Sprintf(query, CRASIS, skuId, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, gridTypeItemDescription, skuId, CRASIS)
 		return query, key
 	}
 
