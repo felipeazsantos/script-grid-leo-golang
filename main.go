@@ -75,16 +75,16 @@ func main() {
 			insertGrid := generateInsertGrid(row)
 			go buildGridScript(insertGrid, insertGrid, grid, &wg)
 
-			insertGridType, key := generateInsertGridType(row)
+			insertGridType, key := generateInsertGridType(row, gridType)
 			go buildGridScript(insertGridType, key, gridType , &wg)
 
-			insertGridGridType, key := generateInsertGridGridType(row, &gridGridTypeOrderType)
+			insertGridGridType, key := generateInsertGridGridType(row, &gridGridTypeOrderType, gridGridType)
 			go buildGridScript(insertGridGridType, key, gridGridType , &wg)
 
-			insertGridTypeItem, key := generateInsertGridTypeItem(row, &gridTypeItemOrderItem)
+			insertGridTypeItem, key := generateInsertGridTypeItem(row, &gridTypeItemOrderItem, gridTypeItem)
 			go buildGridScript(insertGridTypeItem, key, gridTypeItem , &wg)
 
-			insertGridSku, key := generateInsertGridSku(row, &gridSkuOrderSku)
+			insertGridSku, key := generateInsertGridSku(row, &gridSkuOrderSku, gridSku)
 			go buildGridScript(insertGridSku, key, gridSku , &wg)
 
 			insertGridSkuItem, key := generateInsertGridSkuItem(row)
@@ -121,15 +121,16 @@ func generateInsertGrid(row []string) string {
 	return ""
 }
 
-func generateInsertGridType(row []string) (string, string) {
+func generateInsertGridType(row []string, script *GridScript) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
 	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
 
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType
+	exists := script.Exists[key]
 
-	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" {
+	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && !exists {
 		query := `ExecRaw(db, %sINSERT INTO grid_type (description, alias, view_type, date_created, last_updated)
 								SELECT '%s', '%s', '%s', now(), now()
 								WHERE NOT EXISTS (
@@ -143,7 +144,7 @@ func generateInsertGridType(row []string) (string, string) {
 	return "", key
 }
 
-func generateInsertGridGridType(row []string, orderType *int) (string, string) {
+func generateInsertGridGridType(row []string, orderType *int, script *GridScript) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
@@ -151,9 +152,10 @@ func generateInsertGridGridType(row []string, orderType *int) (string, string) {
 	gridTypeViewType = getGridTypeViewType(gridTypeViewType)
 
 	key := gridTypeDescription + gridTypeAlias + gridTypeViewType + gridDescription
+	exists := script.Exists[key]
 
-	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && gridDescription != "" {
-		query := `ExecRaw(db, %sINSERT INTO grid_grid_type(grid_id, grid_type_id, order_Type, date_created, last_updated)
+	if gridTypeDescription != "" && gridTypeAlias != "" && gridTypeViewType != "" && gridDescription != "" && !exists {
+		query := `ExecRaw(db, %sINSERT INTO grid_grid_type (grid_id, grid_type_id, order_Type, date_created, last_updated)
 				  SELECT g.id,
 						 gt.id,
 						 %d,
@@ -177,13 +179,14 @@ func generateInsertGridGridType(row []string, orderType *int) (string, string) {
 	return "", key
 }
 
-func generateInsertGridTypeItem(row []string, orderItem *int) (string, string) {
+func generateInsertGridTypeItem(row []string, orderItem *int, script *GridScript) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeItemDescription := row[3]
 
 	key := gridTypeDescription + gridTypeItemDescription
+	exists := script.Exists[key]
 
-	if gridTypeDescription != "" && gridTypeItemDescription != "" {
+	if gridTypeDescription != "" && gridTypeItemDescription != "" && !exists {
 		query := `ExecRaw(db, %sINSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
 							  SELECT gt.id,
 									 %d,
@@ -206,7 +209,7 @@ func generateInsertGridTypeItem(row []string, orderItem *int) (string, string) {
 	return "", key
 }
 
-func generateInsertGridSku(row []string, orderSku *int) (string, string) {
+func generateInsertGridSku(row []string, orderSku *int, script *GridScript) (string, string) {
 	gridDescription := row[6]
 	gridSku := row[7]
 	var skuMain string
@@ -221,7 +224,9 @@ func generateInsertGridSku(row []string, orderSku *int) (string, string) {
 	}
 
 	key := gridDescription + gridSku
-	if gridDescription != "" && gridSku != "" {
+	exists := script.Exists[key]
+
+	if gridDescription != "" && gridSku != "" && !exists {
 		skuId, _ := strconv.Atoi(gridSku)
 		skuMainInt, _ := strconv.Atoi(skuMain)
 
