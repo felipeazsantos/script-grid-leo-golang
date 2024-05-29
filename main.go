@@ -13,7 +13,7 @@ import (
 
 const (
 	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Ajuste carga inicial de Grade com 3 variações 2024 04 29.xlsx"
+	BASE_FILE_NAME = "Carga de Grade 2024 05 17_ Tampas.xlsx"
 	BASE_SHEET_INDEX = 1
 	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME = "SCRIPT - "
@@ -60,11 +60,17 @@ func main() {
 	image := &GridScript{Table: TABLE_IMAGE, Inserts: []string{}, Exists: map[string]bool{}}
 
 	gridTypeItemOrderItem, gridSkuOrderSku, gridGridTypeOrderType := 1, 1, 1
+	var lastGrid string
 
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
 			var wg sync.WaitGroup
 			wg.Add(NUM_WORKERS)
+
+			if lastGrid == "" || lastGrid != row[6] {
+				lastGrid = row[6]
+				gridTypeItemOrderItem, gridSkuOrderSku, gridGridTypeOrderType = 1, 1, 1
+			}
 
 			insertGrid := generateInsertGrid(row)
 			go buildGridScript(insertGrid, insertGrid, grid, &wg)
