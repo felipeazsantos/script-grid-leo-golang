@@ -13,7 +13,7 @@ import (
 
 const (
 	BASE_FILE_PATH       = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME       = "Carga de Grade 2024 05 17_ Tampas.xlsx"
+	BASE_FILE_NAME       = "Carga COMPLETA de Grade 2024 06 04.xlsx"
 	BASE_SHEET_INDEX     = 1
 	DEST_FILE_PATH       = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
 	DEST_FILE_NAME       = "SCRIPT - "
@@ -26,7 +26,7 @@ const (
 	TABLE_GRID_SKU_ITEM  = "grid_sku_item"
 	NUM_WORKERS = 7
 	CRASIS = "`"
-	INSERT_LIMIT_ON_CELL = 40
+	INSERT_LIMIT_ON_CELL = 30
 )
 
 type GridScript struct {
@@ -462,6 +462,7 @@ func formatCellValue(value string) string {
 	cellValue = strings.ReplaceAll(cellValue, "D' Água", "D Água")
 	cellValue = strings.ReplaceAll(cellValue, "D'Água", "D Água")
 	cellValue = strings.ReplaceAll(cellValue, "D'Agua", "D Água")
+	cellValue = strings.ReplaceAll(cellValue, "D'Zainer", "D Zainer")
 	cellValue = strings.ReplaceAll(cellValue, "\n", "")
 	cellValue = strings.ReplaceAll(cellValue, "\t", " ")
 	cellValue = strings.ReplaceAll(cellValue, "      ", " ")
