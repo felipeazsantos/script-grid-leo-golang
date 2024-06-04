@@ -12,27 +12,28 @@ import (
 )
 
 const (
-	BASE_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
-	BASE_FILE_NAME = "Carga de Grade 2024 05 17_ Tampas.xlsx"
-	BASE_SHEET_INDEX = 1
-	DEST_FILE_PATH = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
-	DEST_FILE_NAME = "SCRIPT - "
-	TABLE_IMAGE = "image"
-	TABLE_GRID = "grid"
-	TABLE_GRID_TYPE = "grid_type"
+	BASE_FILE_PATH       = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/"
+	BASE_FILE_NAME       = "Carga de Grade 2024 05 17_ Tampas.xlsx"
+	BASE_SHEET_INDEX     = 1
+	DEST_FILE_PATH       = "/home/felipe/Área de Trabalho/Demandas CWS/Script Grade LEO/generated"
+	DEST_FILE_NAME       = "SCRIPT - "
+	TABLE_IMAGE          = "image"
+	TABLE_GRID           = "grid"
+	TABLE_GRID_TYPE      = "grid_type"
 	TABLE_GRID_GRID_TYPE = "grid_grid_type"
 	TABLE_GRID_TYPE_ITEM = "grid_type_item"
-	TABLE_GRID_SKU = "grid_sku"
-	TABLE_GRID_SKU_ITEM = "grid_sku_item"
+	TABLE_GRID_SKU       = "grid_sku"
+	TABLE_GRID_SKU_ITEM  = "grid_sku_item"
 	NUM_WORKERS = 7
 	CRASIS = "`"
-	INSERT_LIMIT_ON_CELL = 30
+	INSERT_LIMIT_ON_CELL = 40
 )
 
 type GridScript struct {
-	Table string
-	Inserts []string
-	Exists map[string]bool
+	Table        string
+	Inserts      []string
+	Exists       map[string]bool
+	InsertedMain map[string]bool
 }
 
 func main() {
@@ -51,41 +52,33 @@ func main() {
 	rows, err := f.GetRows(sheetName)
 
 	gridScripts := []*GridScript{}
-	grid := &GridScript{Table: TABLE_GRID, Inserts: []string{}, Exists: map[string]bool{}}
-	gridType := &GridScript{Table: TABLE_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
-	gridGridType := &GridScript{Table: TABLE_GRID_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}}
-	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
-	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}}
-	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}}
-	image := &GridScript{Table: TABLE_IMAGE, Inserts: []string{}, Exists: map[string]bool{}}
-
-	gridTypeItemOrderItem, gridSkuOrderSku, gridGridTypeOrderType := 1, 1, 1
-	var lastGrid string
+	grid := &GridScript{Table: TABLE_GRID, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	gridType := &GridScript{Table: TABLE_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	gridGridType := &GridScript{Table: TABLE_GRID_GRID_TYPE, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	gridTypeItem := &GridScript{Table: TABLE_GRID_TYPE_ITEM, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	gridSku := &GridScript{Table: TABLE_GRID_SKU, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	gridSkuItem := &GridScript{Table: TABLE_GRID_SKU_ITEM, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
+	image := &GridScript{Table: TABLE_IMAGE, Inserts: []string{}, Exists: map[string]bool{}, InsertedMain: map[string]bool{}}
 
 	for rowIndex, row := range rows {
 		if rowIndex >= 2 {
 			var wg sync.WaitGroup
 			wg.Add(NUM_WORKERS)
 
-			if lastGrid == "" || lastGrid != row[6] {
-				lastGrid = row[6]
-				gridTypeItemOrderItem, gridSkuOrderSku, gridGridTypeOrderType = 1, 1, 1
-			}
-
 			insertGrid := generateInsertGrid(row)
 			go buildGridScript(insertGrid, insertGrid, grid, &wg)
 
 			insertGridType, key := generateInsertGridType(row, gridType)
-			go buildGridScript(insertGridType, key, gridType , &wg)
+			go buildGridScript(insertGridType, key, gridType, &wg)
 
-			insertGridGridType, key := generateInsertGridGridType(row, &gridGridTypeOrderType, gridGridType)
-			go buildGridScript(insertGridGridType, key, gridGridType , &wg)
+			insertGridGridType, key := generateInsertGridGridType(row, gridGridType)
+			go buildGridScript(insertGridGridType, key, gridGridType, &wg)
 
-			insertGridTypeItem, key := generateInsertGridTypeItem(row, &gridTypeItemOrderItem, gridTypeItem)
-			go buildGridScript(insertGridTypeItem, key, gridTypeItem , &wg)
+			insertGridTypeItem, key := generateInsertGridTypeItem(row, gridTypeItem)
+			go buildGridScript(insertGridTypeItem, key, gridTypeItem, &wg)
 
-			insertGridSku, key := generateInsertGridSku(row, &gridSkuOrderSku, gridSku)
-			go buildGridScript(insertGridSku, key, gridSku , &wg)
+			insertGridSku, key := generateInsertGridSku(row, gridSku)
+			go buildGridScript(insertGridSku, key, gridSku, &wg)
 
 			insertGridSkuItem, key := generateInsertGridSkuItem(row)
 			go buildGridScript(insertGridSkuItem, key, gridSkuItem, &wg)
@@ -144,7 +137,7 @@ func generateInsertGridType(row []string, script *GridScript) (string, string) {
 	return "", key
 }
 
-func generateInsertGridGridType(row []string, orderType *int, script *GridScript) (string, string) {
+func generateInsertGridGridType(row []string, script *GridScript) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeAlias := row[2]
 	gridTypeViewType := row[4]
@@ -158,28 +151,30 @@ func generateInsertGridGridType(row []string, orderType *int, script *GridScript
 		query := `ExecRaw(db, %sINSERT INTO grid_grid_type (grid_id, grid_type_id, order_Type, date_created, last_updated)
 				  SELECT g.id,
 						 gt.id,
-						 %d,
+						 COALESCE(MAX(ggtOrder.order_type), 0) + 1,
 						 now(),
 					     now()
-					FROM grid g
-					 CROSS JOIN grid_type gt
-					 LEFT JOIN grid_grid_type ggt ON ggt.grid_id = g.id and ggt.grid_type_id = gt.id
+					FROM  grid g
+						CROSS JOIN grid_type gt
+						LEFT JOIN grid_grid_type ggtOrder ON g.id = ggtOrder.grid_id 
+						LEFT JOIN grid_grid_type ggt ON g.id = ggt.grid_id AND gt.id = ggt.grid_type_id 
 					WHERE g.description = '%s' 
 					  AND gt.description = '%s' AND gt.alias = '%s' AND gt.view_type = '%s'
 					  AND NOT EXISTS (
 					 	SELECT 1 FROM grid_grid_type ggt2
 						 WHERE ggt2.id = ggt.id
-					  );%s) &&
+					  )
+					  GROUP BY g.id, gt.id;
+					  ;%s) &&
 				`
-		query = fmt.Sprintf(query, CRASIS, *orderType, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
-		*orderType++
+		query = fmt.Sprintf(query, CRASIS, gridDescription, gridTypeDescription, gridTypeAlias, gridTypeViewType, CRASIS)
 		return query, key
 	}
 
 	return "", key
 }
 
-func generateInsertGridTypeItem(row []string, orderItem *int, script *GridScript) (string, string) {
+func generateInsertGridTypeItem(row []string, script *GridScript) (string, string) {
 	gridTypeDescription := row[1]
 	gridTypeItemDescription := row[3]
 
@@ -189,27 +184,29 @@ func generateInsertGridTypeItem(row []string, orderItem *int, script *GridScript
 	if gridTypeDescription != "" && gridTypeItemDescription != "" && !exists {
 		query := `ExecRaw(db, %sINSERT INTO grid_type_item (grid_type_id, order_item, description, date_created, last_updated) 
 							  SELECT gt.id,
-									 %d,
-									 '%s',
+									 COALESCE(MAX(gtiOrder.order_item), 0) + 1,
+									 '%s' as description,
 									 now(),
 									 now()
 							   FROM grid_type gt
-							   LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_id AND gti.description = '%s'
+								LEFT JOIN grid_type_item gtiOrder ON gt.id = gtiOrder.grid_type_id
+							   	LEFT JOIN grid_type_item gti ON gt.id = gti.grid_type_id AND gti.description = '%s'
 							  WHERE gt.description = '%s'
 								AND NOT EXISTS (
 									SELECT 1 FROM grid_type_item gti2
 									WHERE gti.id = gti2.id
-								);%s) &&
+								)
+								GROUP BY gt.id, description
+								;%s) &&
 				`
-		query = fmt.Sprintf(query, CRASIS, *orderItem, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription, CRASIS)
-		*orderItem++
+		query = fmt.Sprintf(query, CRASIS, gridTypeItemDescription, gridTypeItemDescription, gridTypeDescription, CRASIS)
 		return query, key
 	}
 
 	return "", key
 }
 
-func generateInsertGridSku(row []string, orderSku *int, script *GridScript) (string, string) {
+func generateInsertGridSku(row []string, script *GridScript) (string, string) {
 	gridDescription := row[6]
 	gridSku := row[7]
 	var skuMain string
@@ -229,17 +226,25 @@ func generateInsertGridSku(row []string, orderSku *int, script *GridScript) (str
 	if gridDescription != "" && gridSku != "" && !exists {
 		skuId, _ := strconv.Atoi(gridSku)
 		skuMainInt, _ := strconv.Atoi(skuMain)
+		insertedMain := script.InsertedMain[gridDescription]
+
+		if skuMainInt == 1 && !insertedMain {
+			script.InsertedMain[gridDescription] = true
+		} else if skuMainInt == 1 && insertedMain  {
+			skuMainInt = 0
+		}
 
 		query := `ExecRaw(db, %sINSERT INTO grid_sku (grid_id, sku_id, order_sku, main, date_created, last_updated) 
 				SELECT
 					g.id,
 				    %d as sku_id,
-					%d,
+					COALESCE(MAX(gsOrder.order_sku), 0) + 1,
 					%d,
 					now(),
 					now()
 				FROM grid g
-				LEFT JOIN grid_sku gs ON gs.grid_id = g.id AND gs.sku_id = %d
+					LEFT JOIN grid_sku gsOrder ON gsOrder.grid_id = g.id
+					LEFT JOIN grid_sku gs ON gs.grid_id = g.id AND gs.sku_id = %d
 			    WHERE g.description = '%s' 
 				AND NOT EXISTS (
 					SELECT 1 FROM grid_sku gs2
@@ -247,11 +252,12 @@ func generateInsertGridSku(row []string, orderSku *int, script *GridScript) (str
 				)
 				AND EXISTS (
 					SELECT 1 FROM sku WHERE id = %d
-				);%s) &&		
+				)
+				GROUP BY g.id, sku_id
+				;%s) &&		
 				`
 
-		query = fmt.Sprintf(query, CRASIS, skuId, *orderSku, skuMainInt, skuId, gridDescription, skuId, CRASIS)
-		*orderSku++
+		query = fmt.Sprintf(query, CRASIS, skuId, skuMainInt, skuId, gridDescription, skuId, CRASIS)
 		return query, key
 	}
 
